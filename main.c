@@ -1,7 +1,9 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 #define BUFFER_SIZE 1024
 
@@ -24,6 +26,10 @@ int main() {
     host_addr.sin_family = AF_INET;
     host_addr.sin_port = htons(port);
     host_addr.sin_addr.s_addr = htonl(INADDR_ANY); // TODO: change address?
+
+    // Create client address
+    struct sockaddr_in client_addr;
+    int client_addrlen = sizeof(client_addr);
 
     // Bind the socket to the address
     if (bind(sockfd, (struct sockaddr *)&host_addr, host_addrlen) != 0) {
@@ -56,12 +62,26 @@ int main() {
         }
         printf("connection accepted\n");
 
+        // Get client address
+        int sockn = getsockname(newsockfd, (struct sockaddr *)&client_addr,
+                                (socklen_t *)&client_addrlen);
+        if (sockn < 0) {
+            perror("webserver (getsockname)");
+            continue;
+        }
+
         // Read from the socket
         int valread = read(newsockfd, buffer, BUFFER_SIZE);
         if (valread < 0) {
             perror("webserver (read)");
             continue;
         }
+
+        // Read the request
+        char method[BUFFER_SIZE], uri[BUFFER_SIZE], version[BUFFER_SIZE];
+        sscanf(buffer, "%s %s %s", method, uri, version);
+        printf("[%s:%u] %s %s %s\n", inet_ntoa(client_addr.sin_addr),
+               ntohs(client_addr.sin_port), method, version, uri);
 
         // Write to the socket
         int valwrite = write(newsockfd, resp, strlen(resp));
