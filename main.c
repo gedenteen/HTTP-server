@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <sys/socket.h>
 
+#define BUFFER_SIZE 1024
+
 int main() {
     // Create a socket
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -37,6 +39,12 @@ int main() {
     }
     printf("server listening for connections\n");
 
+    char buffer[BUFFER_SIZE];
+    char resp[] = "HTTP/1.0 200 OK\r\n"
+                  "Server: webserver-c\r\n"
+                  "Content-type: text/html\r\n\r\n"
+                  "<html>hello, world</html>\r\n";
+
     for (;;) {
         // Accept incoming connections
         int newsockfd = accept(sockfd,
@@ -47,6 +55,20 @@ int main() {
             continue;
         }
         printf("connection accepted\n");
+
+        // Read from the socket
+        int valread = read(newsockfd, buffer, BUFFER_SIZE);
+        if (valread < 0) {
+            perror("webserver (read)");
+            continue;
+        }
+
+        // Write to the socket
+        int valwrite = write(newsockfd, resp, strlen(resp));
+        if (valwrite < 0) {
+            perror("webserver (write)");
+            continue;
+        }
 
         close(newsockfd);
     }
