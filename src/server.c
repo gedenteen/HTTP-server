@@ -10,11 +10,32 @@
 
 #define BUFFER_SIZE 1024
 
-char * render_static_file(char * filename) {
-    FILE* file = fopen(filename, "r");
+char* concat(const char *s1, const char *s2)
+{
+    size_t len1 = strlen(s1);
+    size_t len2 = strlen(s2);
 
+    char *result = malloc((len1 + len2 + 1) * sizeof(char));
+
+    if (!result) {;
+        perror("concat (memory allocation)");
+        return NULL;
+    }
+
+    memcpy(result, s1, len1);
+    memcpy(result + len1, s2, len2 + 1);
+
+    return result;
+}
+
+char * read_file(const char *path_to_html,
+                 const char *filename)
+{
+    char *path_plus_filename = concat(path_to_html, filename);
+
+    FILE* file = fopen(path_plus_filename, "r");
     if (file == NULL) {
-        printf("%s does not exist \n", filename);
+        printf("%s does not exist \n", path_plus_filename);
         file = fopen("page404.html", "r");
         if (file == NULL) {
             perror("can't open page404.html");
@@ -22,8 +43,11 @@ char * render_static_file(char * filename) {
         }
     }
     else {
-        printf("%s does exist \n", filename);
+        printf("%s does exist \n", path_plus_filename);
     }
+
+    free(path_plus_filename);
+    path_plus_filename = NULL;
 
     fseek(file, 0, SEEK_END);
     long fsize = ftell(file);
@@ -40,7 +64,9 @@ char * render_static_file(char * filename) {
     return temp;
 }
 
-int run_server()
+int run_server(const char *ip_addr,
+               const int port,
+               const char *path_to_html)
 {
     // Create a socket
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -59,11 +85,10 @@ int run_server()
     // Create the address to bind the socket to
     struct sockaddr_in host_addr;
     int host_addrlen = sizeof(host_addr);
-    int port = 8080;
 
     host_addr.sin_family = AF_INET;
     host_addr.sin_port = htons(port);
-    host_addr.sin_addr.s_addr = htonl(INADDR_ANY); // TODO: change address?
+    host_addr.sin_addr.s_addr = inet_addr(ip_addr);
 
     // Create client address
     struct sockaddr_in client_addr;
@@ -126,8 +151,9 @@ int run_server()
         printf("[%s:%u] %s %s %s\n", inet_ntoa(client_addr.sin_addr),
                ntohs(client_addr.sin_port), method, version, filename);
 
+
         // Copy file contents (filename without '/' in begin)
-        char *file_contents = render_static_file((filename+1));
+        char *file_contents = read_file(path_to_html, (filename+1));
         if (file_contents == NULL) {
             // TODO
             return 0;

@@ -1,12 +1,13 @@
 #include "server.h"
 
-void read_settings(/* ipaddr, port, path_to_html_files */)
+int main(void)
 {
-    // TODO: read settings
-}
+    // Default settings
+    char ip_addr[] = "127.0.0.1";
+    int port = 8800;
+    char path_to_html[] = "./";
 
-int main() {
-    read_settings();
-    run_server();
+    run_server(ip_addr, port, path_to_html);
+
     return 0;
 }
