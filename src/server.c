@@ -9,7 +9,7 @@
 #include <stdlib.h> //maloc()
 
 #define BUFFER_SIZE 1024
-#define PAGE_404    "page404.html"
+#define PAGE_404    "/page404.html"
 
 char* concat(const char *s1, const char *s2)
 {
@@ -19,7 +19,7 @@ char* concat(const char *s1, const char *s2)
     char *result = malloc((len1 + len2 + 1) * sizeof(char));
 
     if (!result) {;
-        perror("concat (memory allocation)");
+        perror("webserver (concat)");
         return NULL;
     }
 
@@ -52,12 +52,22 @@ char * read_file(const char *path_to_html,
     free(path_plus_filename);
     path_plus_filename = NULL;
 
-    fseek(file, 0, SEEK_END);
+    // Determine number of characters in the file
+    if (fseek(file, 0, SEEK_END) != 0 ) {
+        perror("webserver (fseek)");
+    }
     long fsize = ftell(file);
-    fseek(file, 0, SEEK_SET);
+    if (fsize == -1) {
+        perror("webserver (ftell)");
+    }
+    if (fseek(file, 0, SEEK_SET) != 0) {
+        perror("webserver (fseek)");
+    }
 
-    char* buffer = malloc(sizeof(char) * fsize);
+    // Read file into buffer
+    char* buffer = malloc(sizeof(char) * (fsize + 1));
     fread(buffer, sizeof(char), fsize, file);
+    buffer[fsize] = '\0';
     fclose(file);
     return buffer;
 }
@@ -76,7 +86,7 @@ int run_server(const char *ip_addr,
 
     // If the socket is already in use, then reinitialize it
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0) {
-        perror("setsockopt");
+        perror("webserver (setsockopt)");
         return 1;
     }
 
@@ -107,15 +117,12 @@ int run_server(const char *ip_addr,
     printf("server listening for connections\n");
 
     char buffer[BUFFER_SIZE];
-    // char resp[] = "HTTP/1.0 200 OK\r\n"
-    //               "Server: webserver-c\r\n"
-    //               "Content-type: text/html\r\n\r\n"
-    //               "<html>hello, world</html>\r\n";
-
-    char http_header[] = "HTTP/1.0 200 OK\r\n"
-                         "Server: webserver-c\r\n"
-                         "Content-type: text/html\r\n\r\n";
-
+    const char http_header[] = "HTTP/1.0 200 OK\r\n"
+                               "Server: webserver-c\r\n"
+                               "Content-type: text/html\r\n\r\n";
+    const char msg_resource_unavailable[] = "<html>Error: Resource unavailable."
+                                            " The path to HTML files may be incorrectly"
+                                            " specified </html>";
 
     for (;;) {
         // Accept incoming connections
@@ -144,17 +151,23 @@ int run_server(const char *ip_addr,
         }
 
         // Read the request
-        char method[BUFFER_SIZE], filename[BUFFER_SIZE], version[BUFFER_SIZE];
-        sscanf(buffer, "%s %s %s", method, filename, version);
+        char method[BUFFER_SIZE], uri[BUFFER_SIZE], version[BUFFER_SIZE];
+        sscanf(buffer, "%s %s %s", method, uri, version);
         printf("[%s:%u] %s %s %s\n", inet_ntoa(client_addr.sin_addr),
-               ntohs(client_addr.sin_port), method, version, filename);
+               ntohs(client_addr.sin_port), method, version, uri);
 
+        // Check last symbol in uri. If it is '/', then add "index.html"
+        if (uri[strlen(uri) - 1] == '/') {
+            strcat(uri, "index.html");
+        }
 
-        // Copy file contents (filename without '/' in begin)
-        char *file_contents = read_file(path_to_html, (filename+1));
+        // Copy file contents into char buffer
+        char *file_contents = read_file(path_to_html, uri);
         if (file_contents == NULL) {
-            // TODO
-            return 0;
+            printf("Warning! file_contents == NULL\n");
+            //printf("debug: sizeof(msg_resource_unavailable) = %ld\n", sizeof(msg_resource_unavailable));
+            file_contents = (char*)malloc(sizeof(msg_resource_unavailable));
+            strcpy(file_contents, msg_resource_unavailable);
         }
 
         char *response = concat(http_header, file_contents);

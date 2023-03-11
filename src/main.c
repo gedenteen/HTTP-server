@@ -12,7 +12,7 @@ int main(int argc, char *argv[])
     // Default settings
     char ip_addr[16] = "127.0.0.1";
     int port = 8800;
-    char path_to_html[PATH_MAX] = "./html/";
+    char path_to_html[PATH_MAX] = "./html";
 
     // Process input parameters
     for (int i = 1; i < argc; i++) {
