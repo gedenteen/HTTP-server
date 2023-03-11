@@ -9,6 +9,7 @@
 #include <stdlib.h> //maloc()
 
 #define BUFFER_SIZE 1024
+#define PAGE_404    "page404.html"
 
 char* concat(const char *s1, const char *s2)
 {
@@ -35,17 +36,19 @@ char * read_file(const char *path_to_html,
 
     FILE* file = fopen(path_plus_filename, "r");
     if (file == NULL) {
-        printf("%s does not exist \n", path_plus_filename);
-        file = fopen("page404.html", "r");
-        if (file == NULL) {
-            perror("can't open page404.html");
+        // If impossible to open the file, then open the file with error 404
+        printf("%s does NOT exist \n", path_plus_filename);
+        free(path_plus_filename);
+        if (strcmp(PAGE_404, filename)) {
+            return read_file(path_to_html, PAGE_404);
+        }
+        else {
+            // If we are here, it means that it is impossible to read the file with error 404
             return NULL;
         }
     }
-    else {
-        printf("%s does exist \n", path_plus_filename);
-    }
-
+        
+    printf("%s does exist \n", path_plus_filename);
     free(path_plus_filename);
     path_plus_filename = NULL;
 
