@@ -4,8 +4,40 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <stdlib.h> //maloc()
 
 #define BUFFER_SIZE 1024
+
+char * render_static_file(char * filename) {
+    FILE* file = fopen(filename, "r");
+
+    if (file == NULL) {
+        printf("%s does not exist \n", filename);
+        file = fopen("page404.html", "r");
+        if (file == NULL) {
+            perror("can't open page404.html");
+            return NULL;
+        }
+    }
+    else {
+        printf("%s does exist \n", filename);
+    }
+
+    fseek(file, 0, SEEK_END);
+    long fsize = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    char* temp = malloc(sizeof(char) * (fsize+1));
+    char ch;
+    int i = 0;
+    while ((ch = fgetc(file)) != EOF) {
+        temp[i] = ch;
+        i++;
+    }
+    fclose(file);
+    return temp;
+}
+
 
 int main() {
     // Create a socket
@@ -16,12 +48,16 @@ int main() {
     }
     printf("socket created successfully\n");
 
-    // TODO: reuse address?
+    // If the socket is already in use, then reinitialize it
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int)) < 0) {
+        perror("setsockopt");
+        return 1;
+    }
 
     // Create the address to bind the socket to
     struct sockaddr_in host_addr;
     int host_addrlen = sizeof(host_addr);
-    int port = 8080;
+    int port = 8083;
 
     host_addr.sin_family = AF_INET;
     host_addr.sin_port = htons(port);
@@ -51,6 +87,11 @@ int main() {
                   "Content-type: text/html\r\n\r\n"
                   "<html>hello, world</html>\r\n";
 
+    char http_header[] = "HTTP/1.0 200 OK\r\n"
+                         "Server: webserver-c\r\n"
+                         "Content-type: text/html\r\n\r\n";
+
+
     for (;;) {
         // Accept incoming connections
         int newsockfd = accept(sockfd,
@@ -78,19 +119,34 @@ int main() {
         }
 
         // Read the request
-        char method[BUFFER_SIZE], uri[BUFFER_SIZE], version[BUFFER_SIZE];
-        sscanf(buffer, "%s %s %s", method, uri, version);
+        char method[BUFFER_SIZE], filename[BUFFER_SIZE], version[BUFFER_SIZE];
+        sscanf(buffer, "%s %s %s", method, filename, version);
         printf("[%s:%u] %s %s %s\n", inet_ntoa(client_addr.sin_addr),
-               ntohs(client_addr.sin_port), method, version, uri);
+               ntohs(client_addr.sin_port), method, version, filename);
+
+        // Copy file contents (filename without '/' in begin)
+        char *file_contents = render_static_file((filename+1));
+        if (file_contents == NULL) {
+            // TODO
+            return 0;
+        }
+
+        int response_size = 2048;
+        char *response = (char*)malloc(response_size);
+        strcat(response, http_header);
+        strcat(response, file_contents);
+        strcat(response, "\r\n\r\n");
 
         // Write to the socket
-        int valwrite = write(newsockfd, resp, strlen(resp));
+        int valwrite = write(newsockfd, response, response_size);
         if (valwrite < 0) {
             perror("webserver (write)");
             continue;
         }
 
         close(newsockfd);
+        free(file_contents);
+        free(response);
     }
 
     return 0;
