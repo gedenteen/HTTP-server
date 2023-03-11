@@ -56,15 +56,10 @@ char * read_file(const char *path_to_html,
     long fsize = ftell(file);
     fseek(file, 0, SEEK_SET);
 
-    char* temp = malloc(sizeof(char) * (fsize+1));
-    char ch;
-    int i = 0;
-    while ((ch = fgetc(file)) != EOF) {
-        temp[i] = ch;
-        i++;
-    }
+    char* buffer = malloc(sizeof(char) * fsize);
+    fread(buffer, sizeof(char), fsize, file);
     fclose(file);
-    return temp;
+    return buffer;
 }
 
 int run_server(const char *ip_addr,
@@ -162,15 +157,11 @@ int run_server(const char *ip_addr,
             return 0;
         }
 
-        int response_size = 2048;
-        char *response = (char*)malloc(response_size);
-        strcat(response, http_header);
-        strcat(response, file_contents);
-        strcat(response, "\r\n\r\n");
+        char *response = concat(http_header, file_contents);
         printf("\nresponse:\n%s",response);
 
         // Write to the socket
-        int valwrite = write(newsockfd, response, response_size);
+        int valwrite = write(newsockfd, response, strlen(response) * sizeof(char));
         if (valwrite < 0) {
             perror("webserver (write)");
             continue;
