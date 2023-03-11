@@ -1,3 +1,5 @@
+#include "server.h"
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <stdio.h>
@@ -38,8 +40,8 @@ char * render_static_file(char * filename) {
     return temp;
 }
 
-
-int main() {
+int run_server()
+{
     // Create a socket
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd == -1) {
@@ -57,7 +59,7 @@ int main() {
     // Create the address to bind the socket to
     struct sockaddr_in host_addr;
     int host_addrlen = sizeof(host_addr);
-    int port = 8083;
+    int port = 8080;
 
     host_addr.sin_family = AF_INET;
     host_addr.sin_port = htons(port);
@@ -82,10 +84,10 @@ int main() {
     printf("server listening for connections\n");
 
     char buffer[BUFFER_SIZE];
-    char resp[] = "HTTP/1.0 200 OK\r\n"
-                  "Server: webserver-c\r\n"
-                  "Content-type: text/html\r\n\r\n"
-                  "<html>hello, world</html>\r\n";
+    // char resp[] = "HTTP/1.0 200 OK\r\n"
+    //               "Server: webserver-c\r\n"
+    //               "Content-type: text/html\r\n\r\n"
+    //               "<html>hello, world</html>\r\n";
 
     char http_header[] = "HTTP/1.0 200 OK\r\n"
                          "Server: webserver-c\r\n"
@@ -136,6 +138,7 @@ int main() {
         strcat(response, http_header);
         strcat(response, file_contents);
         strcat(response, "\r\n\r\n");
+        printf("\nresponse:\n%s",response);
 
         // Write to the socket
         int valwrite = write(newsockfd, response, response_size);
