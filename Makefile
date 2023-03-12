@@ -1,10 +1,20 @@
-COMP = gcc
-FLAGS = -Wall -g -o
-OBJECTS = src/main.c src/server.c
+.PHONY: all clean
 
-# TODO .PHONY
+# linking (make binary execuatable file)
+all: src/main.o src/libmyserver.so
+	gcc src/main.o -o main.bin -L./src -lmyserver -Wl,-rpath,./src
 
-all:
-	$(COMP) $(OBJECTS) $(FLAGS) main.bin
+# complilation main.c
+src/main.o:
+	gcc src/main.c -c -o src/main.o
 
-# TODO: clean
+# creating shared library 
+src/libmyserver.so: src/server.o
+	gcc -shared src/server.o -o src/libmyserver.so
+
+# compilation servec.c for creating shared library 
+src/server.o:
+	gcc src/server.c -fPIC -c -o src/server.o
+
+clean:
+	rm -rf src/*.o src/*.so *.bin
