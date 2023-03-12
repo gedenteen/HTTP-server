@@ -1,12 +1,10 @@
 #include "server.h"
 
-#include <arpa/inet.h>
-#include <errno.h>
+#include <arpa/inet.h> // socket
 #include <stdio.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#include <stdlib.h> //maloc()
+#include <string.h> // strcmp()
+#include <unistd.h> // read(), write()
+#include <stdlib.h> // maloc()
 
 #define BUFFER_SIZE 1024
 #define PAGE_404    "/page404.html"
@@ -20,7 +18,7 @@ const char msg_resource_unavailable[] = "<html>Error: Resource unavailable."
 const char msg_forbidden_extension[] = "<html>Sorry, it is allowed to access files"
                                        " only with the .html extension";
 
-char* concat(const char *s1, const char *s2)
+char* concat_string(const char *s1, const char *s2)
 {
     size_t len1 = strlen(s1);
     size_t len2 = strlen(s2);
@@ -28,7 +26,7 @@ char* concat(const char *s1, const char *s2)
     char *result = malloc((len1 + len2 + 1) * sizeof(char));
 
     if (!result) {;
-        perror("webserver (concat)");
+        perror("webserver (concat_string)");
         return NULL;
     }
 
@@ -52,7 +50,7 @@ char * read_file(const char *path_to_html,
     }
 
     // Try to open the file
-    char *path_plus_filename = concat(path_to_html, filename);
+    char *path_plus_filename = concat_string(path_to_html, filename);
 
     FILE* file = fopen(path_plus_filename, "r");
     if (file == NULL) {
@@ -94,6 +92,75 @@ char * read_file(const char *path_to_html,
     return buffer;
 }
 
+void request_processing(int sockfd, 
+                        struct sockaddr_in *host_addr,
+                        int host_addrlen,
+                        const char *path_to_html)
+{
+    // Create client address
+    struct sockaddr_in client_addr;
+    int client_addrlen = sizeof(client_addr);
+
+    char buffer[BUFFER_SIZE];
+
+    for (;;) {
+        // Accept incoming connections
+        int newsockfd = accept(sockfd,
+                               (struct sockaddr *)host_addr,
+                               (socklen_t *)&host_addrlen);
+        if (newsockfd < 0) {
+            perror("webserver (accept)");
+            continue;
+        }
+        printf("connection accepted\n");
+
+        // Get client address
+        int sockn = getsockname(newsockfd,
+                                (struct sockaddr *)&client_addr,
+                                (socklen_t *)&client_addrlen);
+        if (sockn < 0) {
+            perror("webserver (getsockname)");
+            continue;
+        }
+
+        // Read from the socket
+        int valread = read(newsockfd, buffer, BUFFER_SIZE);
+        if (valread < 0) {
+            perror("webserver (read)");
+            continue;
+        }
+
+        // Read the request
+        char method[BUFFER_SIZE], uri[BUFFER_SIZE], version[BUFFER_SIZE];
+        sscanf(buffer, "%s %s %s", method, uri, version);
+        printf("\n[%s:%u] %s %s %s\n", inet_ntoa(client_addr.sin_addr),
+               ntohs(client_addr.sin_port), method, version, uri);
+
+        // Check last symbol in uri. If it is '/', then add "index.html"
+        if (uri[strlen(uri) - 1] == '/') {
+            strcat(uri, "index.html");
+        }
+
+        // Copy file contents into char buffer
+        char *file_contents = read_file(path_to_html, uri);
+        // Assert: read_file() can not return NULL
+
+        char *response = concat_string(http_header, file_contents);
+        //printf("\nresponse:\n%s",response);
+
+        // Write to the socket
+        int valwrite = write(newsockfd, response, strlen(response) * sizeof(char));
+        if (valwrite < 0) {
+            perror("webserver (write)");
+            continue;
+        }
+
+        close(newsockfd);
+        free(file_contents);
+        free(response);
+    }
+}
+
 int run_server(const char *ip_addr,
                const int port,
                const char *path_to_html)
@@ -120,9 +187,6 @@ int run_server(const char *ip_addr,
     host_addr.sin_port = htons(port);
     host_addr.sin_addr.s_addr = inet_addr(ip_addr);
 
-    // Create client address
-    struct sockaddr_in client_addr;
-    int client_addrlen = sizeof(client_addr);
 
     // Bind the socket to the address
     if (bind(sockfd, (struct sockaddr *)&host_addr, host_addrlen) != 0) {
@@ -138,63 +202,10 @@ int run_server(const char *ip_addr,
     }
     printf("server listening for connections\n");
 
-    char buffer[BUFFER_SIZE];
-
-    for (;;) {
-        // Accept incoming connections
-        int newsockfd = accept(sockfd,
-                               (struct sockaddr *)&host_addr,
-                               (socklen_t *)&host_addrlen);
-        if (newsockfd < 0) {
-            perror("webserver (accept)");
-            continue;
-        }
-        printf("connection accepted\n");
-
-        // Get client address
-        int sockn = getsockname(newsockfd, (struct sockaddr *)&client_addr,
-                                (socklen_t *)&client_addrlen);
-        if (sockn < 0) {
-            perror("webserver (getsockname)");
-            continue;
-        }
-
-        // Read from the socket
-        int valread = read(newsockfd, buffer, BUFFER_SIZE);
-        if (valread < 0) {
-            perror("webserver (read)");
-            continue;
-        }
-
-        // Read the request
-        char method[BUFFER_SIZE], uri[BUFFER_SIZE], version[BUFFER_SIZE];
-        sscanf(buffer, "%s %s %s", method, uri, version);
-        printf("[%s:%u] %s %s %s\n", inet_ntoa(client_addr.sin_addr),
-               ntohs(client_addr.sin_port), method, version, uri);
-
-        // Check last symbol in uri. If it is '/', then add "index.html"
-        if (uri[strlen(uri) - 1] == '/') {
-            strcat(uri, "index.html");
-        }
-
-        // Copy file contents into char buffer
-        char *file_contents = read_file(path_to_html, uri);
-        // Assert: read_file() can not return NULL
-
-        char *response = concat(http_header, file_contents);
-        printf("\nresponse:\n%s",response);
-
-        // Write to the socket
-        int valwrite = write(newsockfd, response, strlen(response) * sizeof(char));
-        if (valwrite < 0) {
-            perror("webserver (write)");
-            continue;
-        }
-
-        close(newsockfd);
-        free(file_contents);
-        free(response);
-    }
+    request_processing(sockfd,
+                       &host_addr,
+                       host_addrlen,
+                       path_to_html);
 
     return 0;
 }
