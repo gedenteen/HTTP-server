@@ -11,6 +11,15 @@
 #define BUFFER_SIZE 1024
 #define PAGE_404    "/page404.html"
 
+const char http_header[] = "HTTP/1.0 200 OK\r\n"
+                           "Server: webserver-c\r\n"
+                           "Content-type: text/html\r\n\r\n";
+const char msg_resource_unavailable[] = "<html>Error: Resource unavailable."
+                                        " The path to HTML files may be incorrectly"
+                                        " specified.</html>";
+const char msg_forbidden_extension[] = "<html>Sorry, it is allowed to access files"
+                                       " only with the .html extension";
+
 char* concat(const char *s1, const char *s2)
 {
     size_t len1 = strlen(s1);
@@ -32,6 +41,17 @@ char* concat(const char *s1, const char *s2)
 char * read_file(const char *path_to_html,
                  const char *filename)
 {
+    // Check file extension (allowed to open only *.html)
+    char *file_extension = (char*)filename + (strlen(filename) - 5);
+    printf("file_extension = %s\n", file_extension);
+    if (strcmp(file_extension, ".html") != 0) {
+        printf("it is allowed to access files only with the .html extension\n");
+        char *buffer = (char*)malloc(sizeof(msg_resource_unavailable));
+        strcpy(buffer, msg_forbidden_extension);
+        return buffer;
+    }
+
+    // Try to open the file
     char *path_plus_filename = concat(path_to_html, filename);
 
     FILE* file = fopen(path_plus_filename, "r");
@@ -43,8 +63,10 @@ char * read_file(const char *path_to_html,
             return read_file(path_to_html, PAGE_404);
         }
         else {
-            // If we are here, it means that it is impossible to read the file with error 404
-            return NULL;
+            printf("can't open %s\n", PAGE_404);
+            char *buffer = (char*)malloc(sizeof(msg_resource_unavailable));
+            strcpy(buffer, msg_resource_unavailable);
+            return buffer;
         }
     }
         
@@ -117,12 +139,6 @@ int run_server(const char *ip_addr,
     printf("server listening for connections\n");
 
     char buffer[BUFFER_SIZE];
-    const char http_header[] = "HTTP/1.0 200 OK\r\n"
-                               "Server: webserver-c\r\n"
-                               "Content-type: text/html\r\n\r\n";
-    const char msg_resource_unavailable[] = "<html>Error: Resource unavailable."
-                                            " The path to HTML files may be incorrectly"
-                                            " specified </html>";
 
     for (;;) {
         // Accept incoming connections
@@ -163,12 +179,7 @@ int run_server(const char *ip_addr,
 
         // Copy file contents into char buffer
         char *file_contents = read_file(path_to_html, uri);
-        if (file_contents == NULL) {
-            printf("Warning! file_contents == NULL\n");
-            //printf("debug: sizeof(msg_resource_unavailable) = %ld\n", sizeof(msg_resource_unavailable));
-            file_contents = (char*)malloc(sizeof(msg_resource_unavailable));
-            strcpy(file_contents, msg_resource_unavailable);
-        }
+        // Assert: read_file() can not return NULL
 
         char *response = concat(http_header, file_contents);
         printf("\nresponse:\n%s",response);
